@@ -88,11 +88,12 @@ simulation_w_imp <- function(N, p_1_s, p_2_s) {
   df[, Z_true := Z]
   to_remove <- sample(1:N, size = floor(0.25 * N))
   df[to_remove, Z := NA]
-  observed_means <- df[I1 == 1 | I2 == 1, .(mean_obs = mean(Z, na.rm = TRUE)), by = .(X, Y)]
+  observed_means <- df[I1 == 1 | I2 == 1, .(mean_obs = mean(Z, na.rm = TRUE), mean_obs_all = mean(Z_true)), by = .(X, Y)]
   df <- merge(df, observed_means, by = c("X", "Y"), all.x = TRUE, sort = FALSE)
   df[is.na(Z) & (I1 == 1 | I2 == 1), Z := mean_obs]
   df[, mean_obs := NULL]
-
+  df[, mean_obs_all := NULL]
+  
   true_total_Z <- sum(df[["Z_true"]])
   
   df_observed <- df[I1 == 1 | I2 == 1]
@@ -122,15 +123,18 @@ simulation_w_imp <- function(N, p_1_s, p_2_s) {
   
   df_hidden <- merge(df_hidden, observed_means, by = c("X", "Y"), all.x = TRUE, sort = FALSE)
   df_hidden[, Z_pred_from_count := n_pred * mean_obs]
+  df_hidden[, Z_pred_from_count_all := n_pred * mean_obs_all]
   
   est_total_Z_imp <- sum(df_observed[["Z"]]) + sum(df_hidden[["Z_pred_imp"]])
   est_total_Z_true <- sum(df_observed[["Z_true"]]) + sum(df_hidden[["Z_pred_true"]])
   est_total_Z_from_count <- sum(df_observed[["Z"]]) + sum(df_hidden[["Z_pred_from_count"]])
+  est_total_Z_from_count_all <- sum(df_observed[["Z_true"]]) + sum(df_hidden[["Z_pred_from_count_all"]])
   
   data.table(true_total_Z = true_total_Z,
              est_total_Z_true = est_total_Z_true,
              est_total_Z_imp = est_total_Z_imp,
-             est_total_Z_from_count = est_total_Z_from_count)
+             est_total_Z_from_count = est_total_Z_from_count,
+             est_total_Z_from_count_all = est_total_Z_from_count_all)
   
 }
 
@@ -138,7 +142,7 @@ calculate_metrics <- function(df_results) {
   
   metrics_list <- list()
   
-  for (est in c("est_total_Z_true", "est_total_Z_imp", "est_total_Z_from_count")) {
+  for (est in c("est_total_Z_true", "est_total_Z_imp", "est_total_Z_from_count", "est_total_Z_from_count_all")) {
     error <- df_results[[est]] - df_results[["true_total_Z"]]
     
     bias <- mean(error)
