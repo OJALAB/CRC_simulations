@@ -1,16 +1,17 @@
 source("codes/functions.R")
 set.seed(123)
 
-data <- read_cbop("data-raw/2026_01_15_full.json", as.Date("2026-03-31"))
-setDT(data)
+load("data-raw/data.RData")
+
+data <- data[str_sub(poz_kodZawodu, 1, 1) != "0"]
 data <- data[, c("poz_kodZawodu", "poz_lWolnychMiejsc")]
 data[, poz_kodZawodu := as.factor(str_sub(poz_kodZawodu, 1, 1))]
 setnames(data, old = c("poz_kodZawodu", "poz_lWolnychMiejsc"), new = c("kod", "wakaty"))
 
 true_wakaty <- sum(data[["wakaty"]])
 
-p_1_s <- c(0.3, 0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.4, 0.3, 0.4)
-p_2_s <- c(0.4, 0.3, 0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.4, 0.3)
+p_1_s <- c(0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.4, 0.3, 0.4)
+p_2_s <- c(0.3, 0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.4, 0.3)
 
 results_1 <- data.table(
   true_total_wakaty = numeric(),
