@@ -1,45 +1,23 @@
-library(data.table)
-library(extraDistr)
-library(lubridate)
-library(RcppSimdJson)
-library(stringr)
-library(brglm2)
-library(VGAM)
-library(gamlss)
-library(gamlss.cens)
-library(gamlss.dist)
-
-sim_triple <- function(df, p_easy, p_hard, prob_hard_vec, cens_frac) {
+sim_triple <- function(df, p_1_s, p_2_s, p_3_s, cens_frac) {
   
   df[, kod := relevel(kod, ref = "2")]
   df[, woj := relevel(woj, ref = "22")]
   
   params_probs <- data.table(
     kod = as.factor(1:9),
-    prob_is_hard = prob_hard_vec
+    prob_1 = p_1_s,
+    prob_2 = p_2_s,
+    prob_3 = p_3_s
   )
   
   df <- merge(df, params_probs, by = "kod", sort = FALSE)
-  df[, is_hard := rbinom(.N, 1, prob_is_hard)]
-  df[, `:=`(
-    prob_1 = ifelse(is_hard == 1, p_hard[1], p_easy[1]),
-    prob_2 = ifelse(is_hard == 1, p_hard[2], p_easy[2]),
-    prob_3 = ifelse(is_hard == 1, p_hard[3], p_easy[3])
-  )]
-  df[, I1 := rbinom(.N, 1, prob_1)]
-  df[, prob_2 := pmax(prob_2 - (I1 * 0.05), 0)]
-  df[, I2 := rbinom(.N, 1, prob_2)]
-  df[, prob_3 := pmax(prob_3 - (I1 * 0.05), 0)]
-  df[, I3 := rbinom(.N, 1, prob_3)]
-  df[, c("prob_is_hard", "is_hard", "prob_1", "prob_2", "prob_3") := NULL]
-
-  # df[, I1 := rbinom(n = .N, size = 1, prob = prob_1)]
-  # df[I1 == 0, prob_2 := pmin(prob_2 + 0.2, 1)]
-  # df[, I2 := rbinom(n = .N, size = 1, prob = prob_2)]
-  # df[I1 == 0, prob_3 := pmin(prob_3 + 0.2, 1)]
-  # df[, I3 := rbinom(n = .N, size = 1, prob = prob_3)]
-  # df[, c("prob_1", "prob_2", "prob_3") := NULL]
-
+  df[, I1 := rbinom(n = .N, size = 1, prob = prob_1)]
+  df[I1 == 0, prob_2 := pmin(prob_2 + 0.2, 1)]
+  df[, I2 := rbinom(n = .N, size = 1, prob = prob_2)]
+  df[I1 == 0, prob_3 := pmin(prob_3 + 0.2, 1)]
+  df[, I3 := rbinom(n = .N, size = 1, prob = prob_3)]
+  df[, c("prob_1", "prob_2", "prob_3") := NULL]
+  
   df[, wakaty := as.numeric(wakaty)]
   df[, wakaty_true := wakaty]
   # candidates_idx <- df[, .I[wakaty >= 2]]
@@ -79,23 +57,16 @@ sim_triple <- function(df, p_easy, p_hard, prob_hard_vec, cens_frac) {
   df_agg <- df_agg[all_combinations, on = .(kod, I1, I2, I3)]
   df_agg[is.na(count), count := 0]
   
-  # standard GLM
-  model_count <- glm(count ~ (I1 + I2 + I3) * kod + I1:I2 + I1:I3 + I2:I3,
+  model_count <- glm(count ~ (I1 + I2 + I3) * kod + I1:I2 + I1:I3,
                      family = quasipoisson(),
                      data = df_agg)
-  
-  # GLM with BRGLM (bias reduction)
-  model_count_brglm <- glm(count ~ (I1 + I2 + I3) * kod + I1:I2 + I1:I3 + I2:I3,
+  model_count_brglm <- glm(count ~ (I1 + I2 + I3) * kod + I1:I2 + I1:I3,
                            family = poisson(),
                            data = df_agg,
                            method = "brglmFit")
   
-  # EM algorithm with latent classes
-  pred_lca <- baffour_em(df_agg, latent_classes = 2)
-  
   df_hidden[, n_pred := predict(model_count, newdata = df_hidden, type = "response")]
   df_hidden[, n_pred_brglm := predict(model_count_brglm, newdata = df_hidden, type = "response")]
-  df_hidden <- merge(df_hidden, pred_lca, by = "kod", all.x = TRUE, sort = FALSE)
   
   # model_wakaty <- vglm(SurvS4(wakaty, status, type = "right") ~ kod + woj,
   #                      family = cens.poisson,
@@ -142,108 +113,16 @@ sim_triple <- function(df, p_easy, p_hard, prob_hard_vec, cens_frac) {
   df_hidden[, wakaty_pred_brglm_reg := n_pred_brglm * mean_pred]
   df_hidden[, wakaty_pred := n_pred * mean_obs]
   df_hidden[, wakaty_pred_brglm := n_pred_brglm * mean_obs]
-  df_hidden[, wakaty_pred_lca := n_pred_lca * mean_obs]
-  df_hidden[, wakaty_pred_lca_reg := n_pred_lca * mean_pred]
   
   est_total_wakaty_reg <- sum(df_observed[["wakaty"]]) + sum(df_hidden[["wakaty_pred_reg"]])
   est_total_wakaty_brglm_reg <- sum(df_observed[["wakaty"]]) + sum(df_hidden[["wakaty_pred_brglm_reg"]])
   est_total_wakaty <- sum(df_observed[["wakaty_mean"]]) + sum(df_hidden[["wakaty_pred"]])
   est_total_wakaty_brglm <- sum(df_observed[["wakaty_mean"]]) + sum(df_hidden[["wakaty_pred_brglm"]])
-  est_total_wakaty_lca <- sum(df_observed[["wakaty_mean"]]) + sum(df_hidden[["wakaty_pred_lca"]])
-  est_total_wakaty_lca_reg <- sum(df_observed[["wakaty"]]) + sum(df_hidden[["wakaty_pred_lca_reg"]])
   
   data.table(true_total_wakaty = true_total_wakaty,
              est_total_wakaty = est_total_wakaty,
              est_total_wakaty_brglm = est_total_wakaty_brglm,
              est_total_wakaty_reg = est_total_wakaty_reg,
-             est_total_wakaty_brglm_reg = est_total_wakaty_brglm_reg,
-             est_total_wakaty_lca = est_total_wakaty_lca,
-             est_total_wakaty_lca_reg = est_total_wakaty_lca_reg)
-  
-}
-
-baffour_em <- function(df, latent_classes = 2, tol = 1e-6, max_iter = 1000) {
-  
-  grid <- CJ(
-    kod = unique(df[["kod"]]),
-    I1 = factor(c("0", "1"), levels = c("0", "1")),
-    I2 = factor(c("0", "1"), levels = c("0", "1")),
-    I3 = factor(c("0", "1"), levels = c("0", "1"))
-  )
-  
-  data_full <- merge(grid, df[, .(kod, I1, I2, I3, count)], 
-                     by = c("kod", "I1", "I2", "I3"), 
-                     all.x = TRUE)
-  
-  data_full[is.na(count), count := 0]
-  data_full[, is_missing_cell := (I1 == "0" & I2 == "0" & I3 == "0")]
-  data_em <- data_full[rep(1:.N, each = latent_classes)]
-  data_em[, X := factor(rep(1:latent_classes, times = nrow(data_full)))]
-  
-  random_split <- runif(nrow(data_em)/latent_classes, 0.45, 0.55)
-  data_em[X == "1", em_count := count * random_split]
-  data_em[X == "2", em_count := count * (1 - random_split)]
-  data_em[is_missing_cell == TRUE, em_count := 1]
-  
-  last_coef <- NULL
-  converged <- FALSE
-  iter <- 0
-
-  while (!converged && iter < max_iter) {
-    
-    iter <- iter + 1
-    
-    model <- glm(em_count ~ (I1 + I2 + I3) * X + kod * X + I1:I2 + I1:I3,
-                 family = quasipoisson(),
-                 data = data_em)
-    
-    data_em[, mu_pred := fitted(model)]
-    current_coef <- coef(model)
-    if (!is.null(last_coef)) {
-      diff <- max(abs(current_coef - last_coef))
-      if (diff < tol) converged <- TRUE
-    }
-    last_coef <- current_coef
-    
-    data_em[, mu_total := sum(mu_pred), by = .(kod, I1, I2, I3)]
-    
-    data_em[is_missing_cell == FALSE, em_count := count / mu_total * mu_pred]
-    data_em[is_missing_cell == TRUE, em_count := mu_pred]
-    
-  }
-  
-  missing_preds <- data_em[is_missing_cell == TRUE,
-                           .(n_pred_lca = sum(em_count)),
-                           by = .(kod)]
-
-}
-
-calculate_metrics_triple <- function(df_results) {
-  
-  metrics_list <- list()
-  
-  for (est in c("est_total_wakaty",
-                "est_total_wakaty_brglm",
-                "est_total_wakaty_reg",
-                "est_total_wakaty_brglm_reg",
-                "est_total_wakaty_lca",
-                "est_total_wakaty_lca_reg")) {
-    error <- df_results[[est]] - df_results[["true_total_wakaty"]]
-    
-    bias <- mean(error)
-    rel_bias <- mean(error / df_results[["true_total_wakaty"]])
-    rmse <- sqrt(mean(error^2))
-    mean_value <- mean(df_results[[est]])
-    
-    metrics_list[[est]] <- data.table(
-      method = est,
-      mean_value = mean_value,
-      mean_bias = bias,
-      mean_rel_bias = rel_bias * 100,
-      rmse = rmse
-    )
-  }
-  
-  rbindlist(metrics_list)
+             est_total_wakaty_brglm_reg = est_total_wakaty_brglm_reg)
   
 }
