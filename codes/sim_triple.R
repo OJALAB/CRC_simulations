@@ -1,7 +1,7 @@
+library(stringr)
 library(foreach)
 library(doParallel)
 
-source("codes/functions.R")
 source("codes/functions_triple.R")
 
 load("data-raw/data.RData")
@@ -13,10 +13,6 @@ data[, prac_kodWojewodztwa := as.factor(prac_kodWojewodztwa)]
 setnames(data, old = c("poz_kodZawodu", "poz_lWolnychMiejsc", "prac_kodWojewodztwa"), new = c("kod", "wakaty", "woj"))
 
 true_wakaty <- sum(data[["wakaty"]])
-
-# p_1_s <- c(0.2, 0.1, 0.2, 0.3, 0.2, 0.1, 0.2, 0.3, 0.2)
-# p_2_s <- c(0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.4, 0.3, 0.4) - 0.1
-# p_3_s <- c(0.3, 0.4, 0.5, 0.4, 0.3, 0.4, 0.5, 0.4, 0.3) - 0.1
 
 cl <- makeCluster(10)
 registerDoParallel(cl)
