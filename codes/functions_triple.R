@@ -136,7 +136,7 @@ sim_triple <- function(df, p_easy, p_hard, prob_hard_vec, cens_frac, Pi, val_sam
   # perform a double EM algorithm with known confusion matrix
   pred_lca_misclass_known <- baffour_misclass_em(df_agg_ml, Pi)
   
-  # perform a double EM algorithm with known confusion matrix
+  # perform a double EM algorithm with estimated confusion matrix
   pred_lca_misclass_est <- baffour_misclass_em(df_agg_ml, Pi_est)
   
   # change colnames

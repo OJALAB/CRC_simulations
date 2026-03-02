@@ -37,7 +37,7 @@ clusterSetRNGStream(cl, 123)
 
 # Scenario I
 
-results_1 <- foreach(i = 1:50, .combine = rbind, .packages = "data.table") %dopar% {
+results_1 <- foreach(i = 1:1000, .combine = rbind, .packages = "data.table") %dopar% {
   sim_triple(data,
              p_easy = c(0.8, 0.2, 0.1),
              p_hard = c(0.1, 0.8, 0.6),
@@ -51,7 +51,7 @@ result_epraca_triple_1 <- calculate_metrics_triple(results_1)
 
 # Scenario 2
 
-results_2 <- foreach(i = 1:50, .combine = rbind, .packages = "data.table") %dopar% {
+results_2 <- foreach(i = 1:1000, .combine = rbind, .packages = "data.table") %dopar% {
   sim_triple(data,
              p_easy = c(0.8, 0.2, 0.1),
              p_hard = c(0.1, 0.8, 0.6),
